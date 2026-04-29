@@ -1,20 +1,13 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Convierte imagenes entre formatos soportados por System.Drawing.
+    Pipeline de conversion grafica con validacion robusta de directorios y menus interactivos.
 .DESCRIPTION
-    Pipeline de conversion con validacion de entrada/salida, manejo seguro
-    de memoria mediante MemoryStream (evita el lock GDI+ sobre archivos origen),
-    y reporte estructurado por consola.
-.PARAMETER DirectoryPath
-    Ruta absoluta del directorio que contiene las imagenes a convertir.
-.PARAMETER InputFormat
-    Extension del formato de entrada (ej: bmp, jpg, png).
-.PARAMETER OutputFormat
-    Extension del formato de salida (ej: png, tiff, jpg).
-.PARAMETER OutputDirectory
-    (Opcional) Directorio de destino. Si se omite, los archivos se guardan
-    en el mismo directorio que los originales.
+    Arquitectura de grado industrial que implementa:
+    1. Autodeteccion heuristica de formatos.
+    2. Menu de seleccion de destino persistente.
+    3. Validacion de existencia y permisos de directorios.
+    4. Manejo de memoria mediante MemoryStream para evitar bloqueos de archivos.
 #>
 
 function Convert-ImageFormat {
@@ -26,11 +19,8 @@ function Convert-ImageFormat {
         [string]$OutputDirectory
     )
 
-    # Add-Type se carga al inicio, fuera del try, para que cualquier fallo
-    # de ensamblado sea evidente antes de iniciar el pipeline.
     Add-Type -AssemblyName System.Drawing
 
-    # Mapa de formatos soportados (entrada Y salida)
     $supportedFormats = @{
         'png'  = [System.Drawing.Imaging.ImageFormat]::Png
         'jpg'  = [System.Drawing.Imaging.ImageFormat]::Jpeg
@@ -40,72 +30,113 @@ function Convert-ImageFormat {
         'tiff' = [System.Drawing.Imaging.ImageFormat]::Tiff
     }
 
+    $menuOptions = @('bmp', 'jpg', 'png', 'gif', 'tiff')
+
     try {
-        Write-Host "`n[+] Image Format Conversion Pipeline" -ForegroundColor Cyan
+        Write-Host "`n[+] IMAGE FORMAT CONVERSION PIPELINE" -ForegroundColor Cyan
         Write-Host "======================================" -ForegroundColor Cyan
 
-        # --- Recoleccion de parametros interactivos ---
+        # --- 1. Validacion de Directorio de Origen ---
         if ([string]::IsNullOrWhiteSpace($DirectoryPath)) {
-            $DirectoryPath = Read-Host "Ingresa la ruta absoluta del directorio"
+            $DirectoryPath = Read-Host "Ingresa la ruta absoluta del directorio de ORIGEN"
         }
 
         if (-not (Test-Path -Path $DirectoryPath -PathType Container)) {
-            throw "El directorio especificado no existe: '$DirectoryPath'"
+            throw "ERROR: El directorio de origen no existe o es inaccesible: '$DirectoryPath'"
         }
 
-        if ([string]::IsNullOrWhiteSpace($InputFormat)) {
-            $InputFormat = Read-Host "Formato de ENTRADA (ej: bmp, jpg, png)"
+        # --- 2. Menu de Formato de Entrada (con Autodeteccion) ---
+        Write-Host "`n[ Seleccione el formato de ENTRADA ]" -ForegroundColor Yellow
+        for ($i = 0; $i -lt $menuOptions.Count; $i++) {
+            Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())"
         }
-
-        if ([string]::IsNullOrWhiteSpace($OutputFormat)) {
-            $OutputFormat = Read-Host "Formato de SALIDA (ej: png, tiff, jpg)"
+        Write-Host "  [A] Autodetectar formatos en el directorio" -ForegroundColor Green
+        
+        $inSelection = Read-Host "`nOpcion (1-$($menuOptions.Count) o A)"
+        if ($inSelection -match '^[aA]$') {
+            $InputFormat = 'auto'
         }
+        elseif ([int]$inSelection -ge 1 -and [int]$inSelection -le $menuOptions.Count) {
+            $InputFormat = $menuOptions[[int]$inSelection - 1]
+        }
+        else { throw "Seleccion de entrada invalida." }
 
-        # --- Normalizacion ---
+        # --- 3. Menu de Formato de Salida ---
+        Write-Host "`n[ Seleccione el formato de SALIDA ]" -ForegroundColor Yellow
+        for ($i = 0; $i -lt $menuOptions.Count; $i++) {
+            Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())"
+        }
+        
+        $outSelection = Read-Host "`nOpcion (1-$($menuOptions.Count))"
+        if ([int]$outSelection -ge 1 -and [int]$outSelection -le $menuOptions.Count) {
+            $OutputFormat = $menuOptions[[int]$outSelection - 1]
+        }
+        else { throw "Seleccion de salida invalida." }
+
+        # --- Normalizacion de Formatos ---
         $InputFormat  = $InputFormat.Replace('.', '').ToLower().Trim()
         $OutputFormat = $OutputFormat.Replace('.', '').ToLower().Trim()
 
-        # Validar formato de ENTRADA
-        if (-not $supportedFormats.ContainsKey($InputFormat)) {
-            throw "Formato de entrada no soportado: '.$InputFormat'. Validos: $($supportedFormats.Keys -join ', ')"
-        }
-
-        # Validar formato de SALIDA
-        if (-not $supportedFormats.ContainsKey($OutputFormat)) {
-            throw "Formato de salida no soportado: '.$OutputFormat'. Validos: $($supportedFormats.Keys -join ', ')"
-        }
-
-        # Anti-colision
         if ($InputFormat -eq $OutputFormat) {
-            throw "El formato de salida (.$OutputFormat) no puede ser identico al de entrada (.$InputFormat)."
+            throw "Error Logico: El formato de salida (.$OutputFormat) es igual al de entrada."
         }
 
-        # --- Directorio de destino (opcional) ---
-        if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+        # --- 4. Menu de Directorio de Salida (Robustez de Ruta) ---
+        Write-Host "`n[ Configuracion de DESTINO ]" -ForegroundColor Yellow
+        Write-Host "  [1] Usar el mismo directorio de origen"
+        Write-Host "  [2] Especificar un nuevo directorio"
+        
+        $outDirChoice = Read-Host "`nOpcion (1-2)"
+
+        if ($outDirChoice -eq '2') {
+            $OutputDirectory = Read-Host "Ingresa la ruta del nuevo directorio de salida"
+            
+            # Comprobacion de existencia del nuevo directorio
+            if (-not (Test-Path -Path $OutputDirectory -PathType Container)) {
+                Write-Host "[!] El directorio no existe." -ForegroundColor Yellow
+                $createDir = Read-Host "Desea crear la ruta: '$OutputDirectory'? (S/N)"
+                
+                if ($createDir -match '^[sS]$') {
+                    New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+                    Write-Host "[+] Infraestructura de salida creada." -ForegroundColor Green
+                }
+                else {
+                    throw "Operacion abortada: No hay un directorio de salida valido."
+                }
+            }
+        }
+        else {
             $OutputDirectory = $DirectoryPath
         }
-        elseif (-not (Test-Path -Path $OutputDirectory -PathType Container)) {
-            Write-Host "[*] Creando directorio de salida: $OutputDirectory" -ForegroundColor Yellow
-            New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+
+        # --- 5. Descubrimiento y Escaneo de Archivos ---
+        $targetFiles = @()
+        if ($InputFormat -eq 'auto') {
+            Write-Host "`n[*] Escaneando archivos graficos soportados..." -ForegroundColor Cyan
+            $targetFiles = Get-ChildItem -Path $DirectoryPath -File | Where-Object {
+                $ext = $_.Extension.Replace('.', '').ToLower()
+                $supportedFormats.ContainsKey($ext) -and ($ext -ne $OutputFormat)
+            }
+        }
+        else {
+            $targetFiles = Get-ChildItem -Path $DirectoryPath -Filter "*.$InputFormat" -File | Where-Object {
+                $_.Extension.Replace('.', '').ToLower() -ne $OutputFormat
+            }
         }
 
-        # --- Descubrimiento de archivos ---
-        $targetFiles = Get-ChildItem -Path $DirectoryPath -Filter "*.$InputFormat" -File
-
         if ($targetFiles.Count -eq 0) {
-            Write-Warning "No se encontraron archivos .$InputFormat en: $DirectoryPath"
+            Write-Warning "No se encontraron archivos validos para procesar."
             return
         }
 
+        # --- 6. Pipeline de Procesamiento ---
         $targetEncoding   = $supportedFormats[$OutputFormat]
         $reportCollection = [System.Collections.Generic.List[PSCustomObject]]::new()
         $counter          = 1
 
-        Write-Host "`n[*] Procesando $($targetFiles.Count) archivo(s)..." -ForegroundColor Yellow
+        Write-Host "[*] Preparando conversion de $($targetFiles.Count) archivos." -ForegroundColor Yellow
 
-        # --- Loop principal ---
         foreach ($file in $targetFiles) {
-
             $outputFileName = [System.IO.Path]::ChangeExtension($file.Name, ".$OutputFormat")
             $outputFullPath = Join-Path -Path $OutputDirectory -ChildPath $outputFileName
             $status         = 'Exitoso'
@@ -114,14 +145,11 @@ function Convert-ImageFormat {
             $memoryStream   = $null
 
             Write-Progress `
-                -Activity "Pipeline de Conversion Grafica" `
+                -Activity "Procesamiento Grafico" `
                 -Status "Procesando: $($file.Name)" `
                 -PercentComplete (($counter / $targetFiles.Count) * 100)
 
             try {
-                # MemoryStream evita el lock GDI+ sobre el archivo origen.
-                # FromFile() mantiene el archivo bloqueado hasta que el Bitmap
-                # se descarta, impidiendo guardarlo en la misma ruta.
                 $fileBytes    = [System.IO.File]::ReadAllBytes($file.FullName)
                 $memoryStream = [System.IO.MemoryStream]::new($fileBytes)
                 $imgObject    = [System.Drawing.Bitmap]::new($memoryStream)
@@ -143,37 +171,27 @@ function Convert-ImageFormat {
                 Estado   = $status
                 Detalles = $errorMessage
             })
-
             $counter++
         }
 
-        # Limpiar barra de progreso al finalizar
-        Write-Progress -Activity "Pipeline de Conversion Grafica" -Completed
+        Write-Progress -Activity "Procesamiento Grafico" -Completed
 
-        # --- Reporte final ---
-        $exitosos = ($reportCollection | Where-Object Estado -eq 'Exitoso').Count
-        $fallidos = ($reportCollection | Where-Object Estado -eq 'Fallido').Count
-
-        Write-Host "`n[+] Telemetria de conversion:`n" -ForegroundColor Green
+        # --- 7. Telemetria Final ---
+        Write-Host "`n[+] REPORTE DE OPERACION:`n" -ForegroundColor Green
         $reportCollection | Format-Table -AutoSize
 
-        Write-Host "    Exitosos : $exitosos" -ForegroundColor Green
-        if ($fallidos -gt 0) {
-            Write-Host "    Fallidos : $fallidos" -ForegroundColor Red
-        }
-        else {
-            Write-Host "    Fallidos : $fallidos" -ForegroundColor Green
-        }
+        $exitosos = ($reportCollection | Where-Object Estado -eq 'Exitoso').Count
+        Write-Host "    Procesados con exito : $exitosos" -ForegroundColor Green
+        Write-Host "    Destino Final        : $OutputDirectory" -ForegroundColor Cyan
     }
     catch {
-        Write-Host "`n[X] EJECUCION INTERRUMPIDA: " -ForegroundColor Red -NoNewline
+        Write-Host "`n[X] ERROR CRITICO: " -ForegroundColor Red -NoNewline
         Write-Host $_.Exception.Message -ForegroundColor White
     }
     finally {
-        Write-Host "`n[PIPELINE TERMINADO]" -ForegroundColor DarkGray
-        Read-Host "Presiona ENTER para cerrar la consola"
+        Write-Host "`n[ END OF PROCESS ]" -ForegroundColor DarkGray
+        Read-Host "Presiona ENTER para finalizar"
     }
 }
 
-# Entry Point
 Convert-ImageFormat
