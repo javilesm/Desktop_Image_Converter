@@ -70,4 +70,4 @@ Experience the workflow in action:
 ---
 
 ## Development
-Developed and maintained by [![javilesm](https://javilesm.github.io)]()
+Developed and maintained by [![javilesm](https://img.shields.io/badge/github-javilesm-blue?logo=github)](https://javilesm.github.io)
