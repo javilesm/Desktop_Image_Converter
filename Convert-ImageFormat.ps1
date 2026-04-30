@@ -1,14 +1,15 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Pipeline de conversion grafica con validacion robusta para directorios y archivos individuales.
+    Pipeline de conversion grafica con interfaz hacker bilingue y validacion robusta.
 .DESCRIPTION
     Arquitectura de grado industrial que implementa:
-    1. Soporte dual (procesamiento por lotes o archivo unico).
-    2. Autodeteccion heuristica y extraccion de extensiones.
-    3. Limpieza automatica de rutas copiadas de Windows.
-    4. Validacion de existencia y permisos de directorios.
-    5. Manejo de memoria mediante MemoryStream para evitar bloqueos.
+    1. UI Bilingue (ES/EN) con estetica Terminal Hacker.
+    2. Soporte dual (procesamiento por lotes o archivo unico).
+    3. Autodeteccion heuristica y extraccion de extensiones.
+    4. Limpieza automatica de rutas copiadas de Windows.
+    5. Validacion de existencia y permisos de directorios.
+    6. Manejo de memoria mediante MemoryStream para evitar bloqueos.
 #>
 
 function Convert-ImageFormat {
@@ -33,16 +34,33 @@ function Convert-ImageFormat {
 
     $menuOptions = @('bmp', 'jpg', 'png', 'gif', 'tiff')
 
+    # --- ENCABEZADO ASCII  ---
+    function Show-Header {
+        Clear-Host
+        Write-Host " ___________________________________________________________ " -ForegroundColor DarkGray
+        Write-Host "|                                                           |" -ForegroundColor DarkGray
+        Write-Host "|  " -ForegroundColor DarkGray -NoNewline
+        Write-Host " /// @JORGE_AVILES_MX | HECHO EN MEXICO ///      " -ForegroundColor Cyan -NoNewline
+        Write-Host " |" -ForegroundColor DarkGray
+        Write-Host "|___________________________________________________________|" -ForegroundColor DarkGray
+        Write-Host "      _   ___   _____ _    ___ ___ __  __  " -ForegroundColor Green
+        Write-Host "     | | /_\ \ / /_ _| |  | __/ __|  \/  | " -ForegroundColor Green
+        Write-Host "  _  | |/ _ \ V / | || |__| _|\__ \ |\/| | " -ForegroundColor Green
+        Write-Host " | \_/ /_/ \_\_/ |___|____|___|___/_|  |_| " -ForegroundColor Green
+        Write-Host "  \___/                                    " -ForegroundColor Green
+        Write-Host "  = = = = = = = = = = = = = = = = = = = = = = = = = = = = = " -ForegroundColor DarkGray
+        Write-Host "        [ DESKTOP IMAGE CONVERTER - BUILD 2026.1 ]" -ForegroundColor Yellow
+        Write-Host "  = = = = = = = = = = = = = = = = = = = = = = = = = = = = = `n" -ForegroundColor DarkGray
+    }
+
     try {
-        Write-Host "`n[+] IMAGE FORMAT CONVERSION PIPELINE" -ForegroundColor Cyan
-        Write-Host "======================================" -ForegroundColor Cyan
+        Show-Header
 
         # --- 1. Ingesta y Saneamiento de Ruta ---
         if ([string]::IsNullOrWhiteSpace($DirectoryPath)) {
-            $DirectoryPath = Read-Host "Ingresa la ruta absoluta del directorio o archivo de ORIGEN"
+            $DirectoryPath = Read-Host "[>] Ruta origen / Source path (Dir/File)"
         }
 
-        # Saneamiento: Elimina comillas si el usuario copio la ruta desde Windows Explorer
         $InputPath = $DirectoryPath.Replace('"', '').Replace("'", "").Trim()
         
         $isSingleFile  = $false
@@ -53,78 +71,77 @@ function Convert-ImageFormat {
             $singleFileObj = Get-Item -Path $InputPath
             $DirectoryPath = $singleFileObj.DirectoryName
             $InputFormat   = $singleFileObj.Extension.Replace('.', '').ToLower()
-            Write-Host "`n[*] Modo de Archivo Unico detectado. Omitiendo menu de entrada." -ForegroundColor Cyan
+            Write-Host "`n[SYS] Archivo unico detectado / Single file detected." -ForegroundColor Cyan
+            Write-Host "[SYS] Omitiendo formato de entrada / Skipping input format.`n" -ForegroundColor Cyan
         }
         elseif (Test-Path -Path $InputPath -PathType Container) {
             $DirectoryPath = $InputPath
         }
         else {
-            throw "ERROR: La ruta de origen no existe o es inaccesible: '$InputPath'"
+            throw "ERROR: Ruta inaccesible / Path inaccessible: '$InputPath'"
         }
 
-        # --- 2. Menu de Formato de Entrada (Solo para directorios) ---
+        # --- 2. Menu de Formato de Entrada ---
         if (-not $isSingleFile) {
-            Write-Host "`n[ Seleccione el formato de ENTRADA ]" -ForegroundColor Yellow
+            Write-Host ":: FORMATO DE ENTRADA / INPUT FORMAT ::" -ForegroundColor Yellow
             for ($i = 0; $i -lt $menuOptions.Count; $i++) {
-                Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())"
+                Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())" -ForegroundColor White
             }
-            Write-Host "  [A] Autodetectar formatos en el directorio" -ForegroundColor Green
+            Write-Host "  [A] Autodetectar / Auto-detect" -ForegroundColor Green
             
-            $inSelection = Read-Host "`nOpcion (1-$($menuOptions.Count) o A)"
+            $inSelection = Read-Host "`n[>] Opcion / Option (1-$($menuOptions.Count) or A)"
             if ($inSelection -match '^[aA]$') {
                 $InputFormat = 'auto'
             }
             elseif ([int]$inSelection -ge 1 -and [int]$inSelection -le $menuOptions.Count) {
                 $InputFormat = $menuOptions[[int]$inSelection - 1]
             }
-            else { throw "Seleccion de entrada invalida." }
+            else { throw "Seleccion invalida / Invalid selection." }
         }
 
         # --- 3. Menu de Formato de Salida ---
-        Write-Host "`n[ Seleccione el formato de SALIDA ]" -ForegroundColor Yellow
+        Write-Host "`n:: FORMATO DE SALIDA / OUTPUT FORMAT ::" -ForegroundColor Yellow
         for ($i = 0; $i -lt $menuOptions.Count; $i++) {
-            Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())"
+            Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())" -ForegroundColor White
         }
         
-        $outSelection = Read-Host "`nOpcion (1-$($menuOptions.Count))"
+        $outSelection = Read-Host "`n[>] Opcion / Option (1-$($menuOptions.Count))"
         if ([int]$outSelection -ge 1 -and [int]$outSelection -le $menuOptions.Count) {
             $OutputFormat = $menuOptions[[int]$outSelection - 1]
         }
-        else { throw "Seleccion de salida invalida." }
+        else { throw "Seleccion invalida / Invalid selection." }
 
-        # --- Normalizacion y Validacion de Formatos ---
-        if (-not $isSingleFile) {
-            $InputFormat = $InputFormat.Replace('.', '').ToLower().Trim()
-        }
+        # --- Normalizacion ---
+        if (-not $isSingleFile) { $InputFormat = $InputFormat.Replace('.', '').ToLower().Trim() }
         $OutputFormat = $OutputFormat.Replace('.', '').ToLower().Trim()
 
         if ($InputFormat -eq $OutputFormat) {
-            throw "Error Logico: El formato de salida (.$OutputFormat) es igual al de entrada."
+            throw "ERROR: Formato salida = entrada / Output equals input (.$OutputFormat)."
         }
         if (-not $supportedFormats.ContainsKey($OutputFormat)) {
-            throw "Error Logico: Formato de salida no soportado."
+            throw "ERROR: Formato no soportado / Unsupported format."
         }
 
-        # --- 4. Menu de Directorio de Salida (Robustez de Ruta) ---
-        Write-Host "`n[ Configuracion de DESTINO ]" -ForegroundColor Yellow
-        Write-Host "  [1] Usar el mismo directorio de origen"
-        Write-Host "  [2] Especificar un nuevo directorio"
+        # --- 4. Menu de Directorio de Salida ---
+        Write-Host "`n:: DESTINO / DESTINATION ::" -ForegroundColor Yellow
+        Write-Host "  [1] Mismo directorio / Same directory" -ForegroundColor White
+        Write-Host "  [2] Nueva ruta / New path" -ForegroundColor White
         
-        $outDirChoice = Read-Host "`nOpcion (1-2)"
+        $outDirChoice = Read-Host "`n[>] Opcion / Option (1-2)"
 
         if ($outDirChoice -eq '2') {
-            $OutputDirectory = Read-Host "Ingresa la ruta del nuevo directorio de salida"
+            $OutputDirectory = Read-Host "[>] Ingresa nueva ruta / Enter new path"
             
             if (-not (Test-Path -Path $OutputDirectory -PathType Container)) {
-                Write-Host "[!] El directorio no existe." -ForegroundColor Yellow
-                $createDir = Read-Host "Desea crear la ruta: '$OutputDirectory'? (S/N)"
+                Write-Host "[!] Ruta inexistente / Path does not exist." -ForegroundColor Yellow
+                $createDir = Read-Host "[?] Crear directorio / Create directory? (S/Y/N)"
                 
-                if ($createDir -match '^[sS]$') {
+                if ($createDir -match '^[sSyY]$') {
                     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-                    Write-Host "[+] Infraestructura de salida creada." -ForegroundColor Green
+                    Write-Host "[OK] Infraestructura creada / Infrastructure created." -ForegroundColor Green
                 }
                 else {
-                    throw "Operacion abortada: No hay un directorio de salida valido."
+                    throw "Operacion abortada / Operation aborted."
                 }
             }
         }
@@ -132,14 +149,14 @@ function Convert-ImageFormat {
             $OutputDirectory = $DirectoryPath
         }
 
-        # --- 5. Descubrimiento y Escaneo de Archivos ---
+        # --- 5. Escaneo de Archivos ---
         $targetFiles = @()
         
         if ($isSingleFile) {
             $targetFiles = @($singleFileObj)
         }
         elseif ($InputFormat -eq 'auto') {
-            Write-Host "`n[*] Escaneando archivos graficos soportados..." -ForegroundColor Cyan
+            Write-Host "`n[SYS] Escaneo heuristico / Heuristic scan in progress..." -ForegroundColor Cyan
             $targetFiles = Get-ChildItem -Path $DirectoryPath -File | Where-Object {
                 $ext = $_.Extension.Replace('.', '').ToLower()
                 $supportedFormats.ContainsKey($ext) -and ($ext -ne $OutputFormat)
@@ -152,7 +169,7 @@ function Convert-ImageFormat {
         }
 
         if ($targetFiles.Count -eq 0) {
-            Write-Warning "No se encontraron archivos validos para procesar."
+            Write-Warning "Cero archivos candidatos / Zero candidate files found."
             return
         }
 
@@ -161,19 +178,19 @@ function Convert-ImageFormat {
         $reportCollection = [System.Collections.Generic.List[PSCustomObject]]::new()
         $counter          = 1
 
-        Write-Host "[*] Preparando conversion de $($targetFiles.Count) archivo(s)." -ForegroundColor Yellow
+        Write-Host "`n[SYS] Inicializando motor / Initializing engine. Archivos/Files: $($targetFiles.Count)" -ForegroundColor Yellow
 
         foreach ($file in $targetFiles) {
             $outputFileName = [System.IO.Path]::ChangeExtension($file.Name, ".$OutputFormat")
             $outputFullPath = Join-Path -Path $OutputDirectory -ChildPath $outputFileName
-            $status         = 'Exitoso'
-            $errorMessage   = 'N/A'
+            $status         = 'OK'
+            $errorMessage   = '---'
             $imgObject      = $null
             $memoryStream   = $null
 
             Write-Progress `
-                -Activity "Procesamiento Grafico" `
-                -Status "Procesando: $($file.Name)" `
+                -Activity "[/// PROCESSING DATA ///]" `
+                -Status "$($file.Name) -> $outputFileName" `
                 -PercentComplete (($counter / $targetFiles.Count) * 100)
 
             try {
@@ -184,7 +201,7 @@ function Convert-ImageFormat {
                 $imgObject.Save($outputFullPath, $targetEncoding)
             }
             catch {
-                $status       = 'Fallido'
+                $status       = 'FAIL'
                 $errorMessage = $_.Exception.Message
             }
             finally {
@@ -193,31 +210,42 @@ function Convert-ImageFormat {
             }
 
             $reportCollection.Add([PSCustomObject]@{
-                Origen   = $file.Name
-                Destino  = $outputFileName
-                Estado   = $status
-                Detalles = $errorMessage
+                Source   = $file.Name
+                Dest     = $outputFileName
+                Status   = $status
+                Log      = $errorMessage
             })
             $counter++
         }
 
-        Write-Progress -Activity "Procesamiento Grafico" -Completed
+        Write-Progress -Activity "[/// PROCESSING DATA ///]" -Completed
 
-        # --- 7. Telemetria Final ---
-        Write-Host "`n[+] REPORTE DE OPERACION:`n" -ForegroundColor Green
+        # --- 7. Telemetria Final y Footer ---
+        Write-Host "`n:: TELEMETRIA FINAL / FINAL TELEMETRY ::`n" -ForegroundColor Green
         $reportCollection | Format-Table -AutoSize
 
-        $exitosos = ($reportCollection | Where-Object Estado -eq 'Exitoso').Count
-        Write-Host "    Procesados con exito : $exitosos" -ForegroundColor Green
-        Write-Host "    Destino Final        : $OutputDirectory" -ForegroundColor Cyan
+        $exitosos = ($reportCollection | Where-Object Status -eq 'OK').Count
+        Write-Host " [>] Procesados / Successful : $exitosos" -ForegroundColor Green
+        Write-Host " [>] Destino / Output Path   : $OutputDirectory`n" -ForegroundColor Cyan
+
     }
     catch {
-        Write-Host "`n[X] ERROR CRITICO: " -ForegroundColor Red -NoNewline
+        Write-Host "`n[FATAL ERROR] " -ForegroundColor Red -NoNewline
         Write-Host $_.Exception.Message -ForegroundColor White
     }
     finally {
-        Write-Host "`n[ END OF PROCESS ]" -ForegroundColor DarkGray
-        Read-Host "Presiona ENTER para finalizar"
+        # --- FOOTER (CREDITOS & REPO) ---
+        Write-Host " ___________________________________________________________ " -ForegroundColor DarkGray
+        Write-Host "|                                                           |" -ForegroundColor DarkGray
+        Write-Host "| " -ForegroundColor DarkGray -NoNewline
+        Write-Host " Desarrollado por / Developed by: Jorge Luis Aviles Medina " -ForegroundColor DarkGray -NoNewline
+        Write-Host "|" -ForegroundColor DarkGray
+        Write-Host "| " -ForegroundColor DarkGray -NoNewline
+        Write-Host " GitHub: https://github.com/javilesm/Desktop_Image_Converter" -ForegroundColor DarkGray -NoNewline
+        Write-Host "|" -ForegroundColor DarkGray
+        Write-Host "|___________________________________________________________|" -ForegroundColor DarkGray
+        Write-Host "`n[ TERMINAL CLOSED ]" -ForegroundColor DarkGray
+        Read-Host "Presiona ENTER para salir / Press ENTER to exit"
     }
 }
 
