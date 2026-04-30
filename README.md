@@ -4,7 +4,9 @@
 [![.NET](https://img.shields.io/badge/.NET-System.Drawing-purple.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
 
-A high-performance, robust PowerShell pipeline for batch image conversion. Engineered with a focus on memory safety, execution stability, and seamless user experience, this tool leverages native `.NET` libraries to process graphic files without external dependencies.
+**Desktop Image Converter** is a high-performance, industrial-grade PowerShell pipeline designed for high-volume batch image processing. Engineered for professionals who require absolute stability, it leverages native `.NET` libraries to ensure memory safety and execution integrity without the overhead of external dependencies.
+
+---
 
 ## 🚀 Core Architecture & Features
 
@@ -16,14 +18,15 @@ This pipeline was designed to handle large volumes of design assets and textures
 * **ASCII-Safe Design:** The codebase is entirely stripped of special characters and diacritics to guarantee absolute stability against `ParserError` crashes caused by UTF-8/ANSI encoding mismatches in standard Windows PowerShell 5.1 environments.
 * **Dynamic Path Management:** Enforces directory integrity checks before execution. It allows users to safely map output files to the source directory or dynamically create new target infrastructures on the fly.
 
+---
+
 ## 🧰 Supported Formats
 
-The tool natively supports bilateral conversion between the following formats:
-* `.BMP`
-* `.JPG` / `.JPEG`
-* `.PNG`
-* `.GIF`
-* `.TIFF`
+The pipeline supports full bilateral conversion between:
+*   **Lossless:** `.PNG`, `.BMP`, `.TIFF`
+*   **Compressed:** `.JPG` / `.JPEG`, `.GIF`
+
+---
 
 ## ⚙️ Installation
 
@@ -32,31 +35,39 @@ Clone the repository to your local machine:
 ```bash
 git clone [https://github.com/javilesm/Desktop_Image_Converter.git](https://github.com/javilesm/Desktop_Image_Converter.git)
 ```
-## 🛠️ Usage
-This tool is designed to be executed interactively. The console UI will guide you through the process, minimizing input errors.
 
-Open an elevated Windows PowerShell or Windows Terminal session.
+---
 
-Navigate to the directory containing the script.
+## 🛠️ Operational Workflow
+This tool is designed for interactive use with a focus on minimizing input friction.
+1. Open an elevated Windows PowerShell or Windows Terminal session.
+2. Navigate to the script's directory.
+3. Execute the pipeline via:
+  - Direct Command: .\Convert-ImageFormat.ps1
+  - Shell Integration: Right-click the file and select "Run with PowerShell".
 
-Execute the pipeline: .\Convert-ImageFormat.ps1 or just Right Click and "Run with Powershell".
+* **Execution Pipeline: **
+- Step 1: Source Ingest: Provide the absolute path (Directory or Single File).
+- Step 2: Input Selection: Define the source format or trigger the Heuristic Autodetect [A].
+- Step 3: Target Format: Define the desired output extension.
+- Step 4: Destination Mapping: Select the same directory or specify a new target path.
+- Step 5: Telemetry: Review the final structured report detailing successful conversions and any anomalies.
 
-## Execution Flow:
-Source Input: Provide the absolute path to the directory containing your images.
+---
 
-Input Format: Select the format you wish to convert from the menu, or select [A] to let the heuristic engine detect all convertible files.
+## 📺 Demonstration
+Experience the workflow in action:
 
-Output Format: Select the desired target format.
+[![Watch the Demo](https://img.shields.io/badge/YouTube-Watch%20Example%20Usage-red?style=for-the-badge&logo=youtube)](https://youtu.be/gDs7XSnMX2g)
 
-Destination: Choose to output files in the same directory or specify/create a new output path.
-
-A detailed telemetry report will be displayed upon completion, breaking down successful operations and any anomalies encountered.
+---
 
 ## 💻 System Requirements
-Windows OS
+- OS: Windows 10/11
+- Runtime: Windows PowerShell 5.1 or PowerShell Core.
+- Policy: Execution Policy must allow local scripts (Set-ExecutionPolicy RemoteSigned).
 
-Windows PowerShell 5.1 or later
+---
 
-Execution Policy configured to allow local scripts (Set-ExecutionPolicy RemoteSigned or executed via -ExecutionPolicy Bypass)
-
-Developed and maintained by javilesm
+## Development
+Developed and maintained by [![javilesm](https://javilesm.github.io)]()
