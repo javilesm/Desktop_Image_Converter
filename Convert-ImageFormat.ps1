@@ -1,13 +1,14 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Pipeline de conversion grafica con validacion robusta de directorios y menus interactivos.
+    Pipeline de conversion grafica con validacion robusta para directorios y archivos individuales.
 .DESCRIPTION
     Arquitectura de grado industrial que implementa:
-    1. Autodeteccion heuristica de formatos.
-    2. Menu de seleccion de destino persistente.
-    3. Validacion de existencia y permisos de directorios.
-    4. Manejo de memoria mediante MemoryStream para evitar bloqueos de archivos.
+    1. Soporte dual (procesamiento por lotes o archivo unico).
+    2. Autodeteccion heuristica y extraccion de extensiones.
+    3. Limpieza automatica de rutas copiadas de Windows.
+    4. Validacion de existencia y permisos de directorios.
+    5. Manejo de memoria mediante MemoryStream para evitar bloqueos.
 #>
 
 function Convert-ImageFormat {
@@ -36,30 +37,48 @@ function Convert-ImageFormat {
         Write-Host "`n[+] IMAGE FORMAT CONVERSION PIPELINE" -ForegroundColor Cyan
         Write-Host "======================================" -ForegroundColor Cyan
 
-        # --- 1. Validacion de Directorio de Origen ---
+        # --- 1. Ingesta y Saneamiento de Ruta ---
         if ([string]::IsNullOrWhiteSpace($DirectoryPath)) {
-            $DirectoryPath = Read-Host "Ingresa la ruta absoluta del directorio de ORIGEN"
+            $DirectoryPath = Read-Host "Ingresa la ruta absoluta del directorio o archivo de ORIGEN"
         }
 
-        if (-not (Test-Path -Path $DirectoryPath -PathType Container)) {
-            throw "ERROR: El directorio de origen no existe o es inaccesible: '$DirectoryPath'"
-        }
-
-        # --- 2. Menu de Formato de Entrada (con Autodeteccion) ---
-        Write-Host "`n[ Seleccione el formato de ENTRADA ]" -ForegroundColor Yellow
-        for ($i = 0; $i -lt $menuOptions.Count; $i++) {
-            Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())"
-        }
-        Write-Host "  [A] Autodetectar formatos en el directorio" -ForegroundColor Green
+        # Saneamiento: Elimina comillas si el usuario copio la ruta desde Windows Explorer
+        $InputPath = $DirectoryPath.Replace('"', '').Replace("'", "").Trim()
         
-        $inSelection = Read-Host "`nOpcion (1-$($menuOptions.Count) o A)"
-        if ($inSelection -match '^[aA]$') {
-            $InputFormat = 'auto'
+        $isSingleFile  = $false
+        $singleFileObj = $null
+
+        if (Test-Path -Path $InputPath -PathType Leaf) {
+            $isSingleFile  = $true
+            $singleFileObj = Get-Item -Path $InputPath
+            $DirectoryPath = $singleFileObj.DirectoryName
+            $InputFormat   = $singleFileObj.Extension.Replace('.', '').ToLower()
+            Write-Host "`n[*] Modo de Archivo Unico detectado. Omitiendo menu de entrada." -ForegroundColor Cyan
         }
-        elseif ([int]$inSelection -ge 1 -and [int]$inSelection -le $menuOptions.Count) {
-            $InputFormat = $menuOptions[[int]$inSelection - 1]
+        elseif (Test-Path -Path $InputPath -PathType Container) {
+            $DirectoryPath = $InputPath
         }
-        else { throw "Seleccion de entrada invalida." }
+        else {
+            throw "ERROR: La ruta de origen no existe o es inaccesible: '$InputPath'"
+        }
+
+        # --- 2. Menu de Formato de Entrada (Solo para directorios) ---
+        if (-not $isSingleFile) {
+            Write-Host "`n[ Seleccione el formato de ENTRADA ]" -ForegroundColor Yellow
+            for ($i = 0; $i -lt $menuOptions.Count; $i++) {
+                Write-Host "  [$($i + 1)] $($menuOptions[$i].ToUpper())"
+            }
+            Write-Host "  [A] Autodetectar formatos en el directorio" -ForegroundColor Green
+            
+            $inSelection = Read-Host "`nOpcion (1-$($menuOptions.Count) o A)"
+            if ($inSelection -match '^[aA]$') {
+                $InputFormat = 'auto'
+            }
+            elseif ([int]$inSelection -ge 1 -and [int]$inSelection -le $menuOptions.Count) {
+                $InputFormat = $menuOptions[[int]$inSelection - 1]
+            }
+            else { throw "Seleccion de entrada invalida." }
+        }
 
         # --- 3. Menu de Formato de Salida ---
         Write-Host "`n[ Seleccione el formato de SALIDA ]" -ForegroundColor Yellow
@@ -73,12 +92,17 @@ function Convert-ImageFormat {
         }
         else { throw "Seleccion de salida invalida." }
 
-        # --- Normalizacion de Formatos ---
-        $InputFormat  = $InputFormat.Replace('.', '').ToLower().Trim()
+        # --- Normalizacion y Validacion de Formatos ---
+        if (-not $isSingleFile) {
+            $InputFormat = $InputFormat.Replace('.', '').ToLower().Trim()
+        }
         $OutputFormat = $OutputFormat.Replace('.', '').ToLower().Trim()
 
         if ($InputFormat -eq $OutputFormat) {
             throw "Error Logico: El formato de salida (.$OutputFormat) es igual al de entrada."
+        }
+        if (-not $supportedFormats.ContainsKey($OutputFormat)) {
+            throw "Error Logico: Formato de salida no soportado."
         }
 
         # --- 4. Menu de Directorio de Salida (Robustez de Ruta) ---
@@ -91,7 +115,6 @@ function Convert-ImageFormat {
         if ($outDirChoice -eq '2') {
             $OutputDirectory = Read-Host "Ingresa la ruta del nuevo directorio de salida"
             
-            # Comprobacion de existencia del nuevo directorio
             if (-not (Test-Path -Path $OutputDirectory -PathType Container)) {
                 Write-Host "[!] El directorio no existe." -ForegroundColor Yellow
                 $createDir = Read-Host "Desea crear la ruta: '$OutputDirectory'? (S/N)"
@@ -111,7 +134,11 @@ function Convert-ImageFormat {
 
         # --- 5. Descubrimiento y Escaneo de Archivos ---
         $targetFiles = @()
-        if ($InputFormat -eq 'auto') {
+        
+        if ($isSingleFile) {
+            $targetFiles = @($singleFileObj)
+        }
+        elseif ($InputFormat -eq 'auto') {
             Write-Host "`n[*] Escaneando archivos graficos soportados..." -ForegroundColor Cyan
             $targetFiles = Get-ChildItem -Path $DirectoryPath -File | Where-Object {
                 $ext = $_.Extension.Replace('.', '').ToLower()
@@ -134,7 +161,7 @@ function Convert-ImageFormat {
         $reportCollection = [System.Collections.Generic.List[PSCustomObject]]::new()
         $counter          = 1
 
-        Write-Host "[*] Preparando conversion de $($targetFiles.Count) archivos." -ForegroundColor Yellow
+        Write-Host "[*] Preparando conversion de $($targetFiles.Count) archivo(s)." -ForegroundColor Yellow
 
         foreach ($file in $targetFiles) {
             $outputFileName = [System.IO.Path]::ChangeExtension($file.Name, ".$OutputFormat")
